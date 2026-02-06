@@ -1,22 +1,24 @@
-let lastEmailText = "";
+let lastScanned = "";
 
-function extractEmailText() {
-  const emailBody = document.querySelector("div.a3s");
-  if (!emailBody) return null;
+function getEmailBody() {
+  // Gmail marks message containers with role="listitem"
+  const messages = document.querySelectorAll('[role="listitem"]');
 
-  const text = emailBody.innerText.trim();
-  if (text.length < 40) return null;
+  if (!messages.length) return null;
 
-  if (text === lastEmailText) return null;
+  // Grab the newest (last) opened email
+  const last = messages[messages.length - 1];
 
-  lastEmailText = text;
+  const text = last.innerText?.trim();
+  if (!text || text.length < 80) return null;
+
+  if (text === lastScanned) return null;
+  lastScanned = text;
+
   return text;
 }
 
-async function scanEmail() {
-  const text = extractEmailText();
-  if (!text) return;
-
+async function analyze(text) {
   try {
     const res = await fetch("http://localhost:3000/api/analyze", {
       method: "POST",
@@ -26,13 +28,11 @@ async function scanEmail() {
 
     const result = await res.json();
 
-    if (result.riskScore >= 60) {
-      showWarning(result);
-    }
+    if (result.riskScore >= 60) showBanner(result);
   } catch {}
 }
 
-function showWarning(result) {
+function showBanner(result) {
   if (document.getElementById("signalsafe-gmail-banner")) return;
 
   const banner = document.createElement("div");
@@ -40,7 +40,7 @@ function showWarning(result) {
 
   banner.style.background = "#7f1d1d";
   banner.style.color = "white";
-  banner.style.padding = "10px";
+  banner.style.padding = "12px";
   banner.style.fontSize = "14px";
   banner.style.textAlign = "center";
   banner.style.position = "sticky";
@@ -48,15 +48,22 @@ function showWarning(result) {
   banner.style.zIndex = "99999";
 
   banner.innerHTML = `
-    ⚠ SignalSafe Warning — ${result.verdict} (${result.riskScore}/100)
-    <button id="ss-view" style="margin-left:12px;padding:4px 8px;">Details</button>
+    ⚠ SignalSafe detected a risky email — ${result.verdict} (${result.riskScore}/100)
+    <button id="ss-close" style="margin-left:10px">Dismiss</button>
   `;
 
   document.body.prepend(banner);
 
-  document.getElementById("ss-view").onclick = () => {
-    alert(result.summary || "Suspicious message detected");
-  };
+  document.getElementById("ss-close").onclick = () => banner.remove();
 }
 
-setInterval(scanEmail, 2500);
+/* THIS is the important part */
+const observer = new MutationObserver(() => {
+  const text = getEmailBody();
+  if (text) analyze(text);
+});
+
+observer.observe(document.body, {
+  childList: true,
+  subtree: true
+});
