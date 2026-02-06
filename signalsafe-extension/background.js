@@ -11,10 +11,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const text = info.selectionText;
 
-  const tabUrl = tab?.url || "";
-  if (isRestrictedUrl(tabUrl)) {
+  const pageUrl = info?.pageUrl || info?.frameUrl || tab?.url || tab?.pendingUrl || "";
+  if (isRestrictedUrl(pageUrl)) {
     // Chrome blocks extensions from injecting into internal pages like chrome://extensions
-    console.warn("SignalSafe: cannot access restricted URL:", tabUrl);
+    console.warn("SignalSafe: cannot access restricted URL:", pageUrl);
     return;
   }
 
@@ -28,11 +28,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const data = await res.json();
 
     if (!tab?.id) return;
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: showResult,
-      args: [data]
-    });
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: showResult,
+        args: [data]
+      });
+    } catch (e) {
+      if (isAccessDeniedError(e)) return;
+      throw e;
+    }
 
   } catch {
     try {
@@ -42,6 +47,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         func: showError
       });
     } catch (e) {
+      // If we can't access the page (chrome://, etc), just ignore.
+      if (isAccessDeniedError(e)) return;
       console.warn("SignalSafe: failed to inject error UI", e);
     }
   }
@@ -55,6 +62,15 @@ function isRestrictedUrl(url) {
     url.startsWith("chrome-extension://") ||
     url.startsWith("edge://") ||
     url.startsWith("about:")
+  );
+}
+
+function isAccessDeniedError(err) {
+  const message = String(err?.message || err || "");
+  return (
+    message.includes("Cannot access a chrome:// URL") ||
+    message.includes("Cannot access contents of the page") ||
+    message.includes("Cannot access")
   );
 }
 
