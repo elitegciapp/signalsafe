@@ -2,7 +2,8 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "analyzeText",
     title: "Analyze with SignalSafe",
-    contexts: ["selection"]
+    contexts: ["selection"],
+    documentUrlPatterns: ["http://*/*", "https://*/*"]
   });
 });
 
