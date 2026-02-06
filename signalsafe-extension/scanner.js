@@ -45,7 +45,15 @@
   const result = await new Promise(resolve => {
     chrome.runtime.sendMessage(
       { type: "SCAN_TEXT", text },
-      response => resolve(response)
+      response => {
+        const lastError = chrome?.runtime?.lastError;
+        if (lastError?.message) {
+          resolve({ error: true, message: lastError.message });
+          return;
+        }
+
+        resolve(response);
+      }
     );
   });
 
@@ -55,7 +63,8 @@
   overlay.remove();
 
   if (!result || result.error) {
-    alert("SignalSafe could not analyze this page.");
+    const msg = result?.message ? `\n\n${result.message}` : "";
+    alert(`SignalSafe could not analyze this page.${msg}`);
     return;
   }
 

@@ -140,9 +140,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: request.text })
     })
-      .then(res => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+        }
+        return res.json();
+      })
       .then(data => sendResponse(data))
-      .catch(() => sendResponse({ error: true }));
+      .catch((e) => sendResponse({ error: true, message: String(e?.message || e || "") }));
 
     return true; // keeps channel open
   }
