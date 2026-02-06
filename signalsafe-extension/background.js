@@ -135,21 +135,49 @@ function showError() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "SCAN_TEXT") {
 
-    fetch("http://localhost:3000/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: request.text })
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
-        }
-        return res.json();
-      })
+    analyzeViaLocalApi(request.text)
       .then(data => sendResponse(data))
-      .catch((e) => sendResponse({ error: true, message: String(e?.message || e || "") }));
+      .catch((e) => {
+        const message = String(e?.message || e || "Failed to fetch");
+        sendResponse({
+          error: true,
+          message: `Failed to reach local analyzer. ${message}`
+        });
+      });
 
     return true; // keeps channel open
   }
 });
+
+async function analyzeViaLocalApi(text) {
+  const urls = [
+    "http://localhost:3000/api/analyze",
+    "http://127.0.0.1:3000/api/analyze"
+  ];
+
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      return await fetchAnalyze(url, text);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error("Failed to fetch");
+}
+
+async function fetchAnalyze(url, text) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} from ${url}: ${bodyText || res.statusText}`);
+  }
+
+  return res.json();
+}
