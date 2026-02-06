@@ -1,0 +1,25 @@
+{
+  "name": "SignalSafe Analyzer",
+  "description": "Detect potential fraud in messages",
+  "version": "1.0",
+  "manifest_version": 3,
+
+  "permissions": ["contextMenus", "activeTab", "scripting"],
+
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://*/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
