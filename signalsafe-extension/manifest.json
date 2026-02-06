@@ -6,10 +6,7 @@
 
   "permissions": ["contextMenus", "activeTab", "scripting"],
 
-  "host_permissions": [
-    "http://localhost:3000/*",
-    "https://*/*"
-  ],
+  "host_permissions": ["http://localhost:3000/*"],
 
   "background": {
     "service_worker": "background.js"

@@ -131,3 +131,19 @@ function showResult(result) {
 function showError() {
   alert("SignalSafe could not reach the local analyzer.");
 }
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "SCAN_TEXT") {
+
+    fetch("http://localhost:3000/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: request.text })
+    })
+      .then(res => res.json())
+      .then(data => sendResponse(data))
+      .catch(() => sendResponse({ error: true }));
+
+    return true; // keeps channel open
+  }
+});

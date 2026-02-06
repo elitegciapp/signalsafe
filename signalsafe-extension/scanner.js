@@ -33,19 +33,31 @@
     if (pos > window.innerHeight) pos = 0;
   }, 16);
 
+  const timeout = setTimeout(() => {
+    clearInterval(interval);
+    overlay.remove();
+    alert("SignalSafe could not analyze this page.");
+  }, 8000);
+
   // extract visible text
   const text = document.body.innerText.slice(0, 15000);
 
-  const res = await fetch("http://localhost:3000/api/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text })
+  const result = await new Promise(resolve => {
+    chrome.runtime.sendMessage(
+      { type: "SCAN_TEXT", text },
+      response => resolve(response)
+    );
   });
 
-  const result = await res.json();
+  clearTimeout(timeout);
 
   clearInterval(interval);
   overlay.remove();
+
+  if (!result || result.error) {
+    alert("SignalSafe could not analyze this page.");
+    return;
+  }
 
   alert(`SignalSafe Scan Complete:
 ${result.verdict}
