@@ -39,8 +39,77 @@
     alert("SignalSafe could not analyze this page.");
   }, 8000);
 
+  function uniq(items) {
+    return Array.from(new Set(items));
+  }
+
+  function getGmailSubjects() {
+    if (location.hostname !== "mail.google.com") {
+      return { openSubject: "", subjects: [] };
+    }
+
+    const openSubject = (document.querySelector("h2.hP")?.innerText || "").trim();
+
+    const subjectNodes = document.querySelectorAll(
+      // Inbox list subjects
+      "span.bog, [role='main'] [role='row'] span[title]"
+    );
+
+    const subjects = [];
+    for (const node of subjectNodes) {
+      const text = (node.innerText || node.getAttribute("title") || "").trim();
+      if (!text) continue;
+      if (text.length < 5) continue;
+      if (text.length > 160) continue;
+      subjects.push(text);
+      if (subjects.length >= 30) break;
+    }
+
+    return {
+      openSubject,
+      subjects: uniq(subjects),
+    };
+  }
+
+  function subjectReasons(subject) {
+    const s = String(subject || "").toLowerCase();
+    const reasons = [];
+
+    if (/(urgent|immediate|act now|final notice|last chance|expires|today only|24\s*hours?|asap)/.test(s)) {
+      reasons.push("urgency pressure");
+    }
+    if (/(verify|verification|confirm|validate|suspended|locked|unusual activity|security alert|password reset|sign\s*in)/.test(s)) {
+      reasons.push("account/security bait");
+    }
+    if (/(invoice|receipt|payment|refund|chargeback|subscription|renewal|billing|overdue)/.test(s)) {
+      reasons.push("billing/payment lure");
+    }
+    if (/(gift\s*card|wire|crypto|bitcoin|wallet|bank transfer|zelle|venmo|cashapp)/.test(s)) {
+      reasons.push("high-risk payment method");
+    }
+    if (/(prize|won|winner|free|giveaway|reward|bonus)/.test(s)) {
+      reasons.push("too-good-to-be-true offer");
+    }
+
+    return reasons;
+  }
+
+  const { openSubject, subjects } = getGmailSubjects();
+  const suspiciousSubjects = subjects
+    .map((subj) => ({ subj, reasons: subjectReasons(subj) }))
+    .filter((x) => x.reasons.length > 0)
+    .slice(0, 10);
+
   // extract visible text
-  const text = document.body.innerText.slice(0, 15000);
+  const pageText = document.body.innerText.slice(0, 15000);
+  const subjectBlock =
+    location.hostname === "mail.google.com"
+      ? `Gmail Subject Lines (visible):\n${
+          [openSubject, ...subjects].filter(Boolean).slice(0, 30).map(s => `- ${s}`).join("\n")
+        }\n\n`
+      : "";
+
+  const text = (subjectBlock + pageText).slice(0, 15000);
 
   const result = await new Promise(resolve => {
     chrome.runtime.sendMessage(
@@ -68,8 +137,34 @@
     return;
   }
 
-  alert(`SignalSafe Scan Complete:
-${result.verdict}
-Risk Score: ${result.riskScore}`);
+  const flags = result.flags || result.redFlags || [];
+  const actions = result.actions || result.recommendedActions || [];
+  const summary = (result.summary || "").trim();
+
+  const suspiciousSubjectsText =
+    location.hostname === "mail.google.com" && suspiciousSubjects.length
+      ? `\n\nSuspicious subjects:\n${
+          suspiciousSubjects
+            .map(x => `- "${x.subj}" (${x.reasons.join(", ")})`)
+            .join("\n")
+        }`
+      : "";
+
+  const flagsText = flags.length
+    ? `\n\nWhy this looks risky:\n${flags.slice(0, 8).map(f => `- ${f}`).join("\n")}`
+    : "";
+
+  const summaryText = summary ? `\n\nSummary:\n${summary}` : "";
+  const actionsText = actions.length
+    ? `\n\nNext steps:\n${actions.slice(0, 6).map(a => `- ${a}`).join("\n")}`
+    : "";
+
+  alert(
+    `SignalSafe Scan Complete:\n${result.verdict}\nRisk Score: ${result.riskScore}` +
+      flagsText +
+      suspiciousSubjectsText +
+      summaryText +
+      actionsText
+  );
 
 })();
