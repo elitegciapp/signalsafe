@@ -11,11 +11,15 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
-export function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: CORS_HEADERS,
-  });
+function withCorsHeaders(res: NextResponse) {
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    res.headers.set(key, value);
+  }
+  return res;
+}
+
+export async function OPTIONS(_req: Request) {
+  return withCorsHeaders(new NextResponse(null, { status: 204 }));
 }
 
 export async function POST(req: Request) {
@@ -23,10 +27,7 @@ export async function POST(req: Request) {
     const { text } = await req.json();
 
     if (!text || text.length < 10) {
-      return NextResponse.json(
-        { error: "Text too short" },
-        { status: 400, headers: CORS_HEADERS },
-      );
+      return withCorsHeaders(NextResponse.json({ error: "Text too short" }, { status: 400 }));
     }
 
     // Try AI first
@@ -42,15 +43,14 @@ export async function POST(req: Request) {
     const actions = (result as any).actions ?? (result as any).recommendedActions ?? [];
     const flags = (result as any).flags ?? (result as any).redFlags ?? [];
 
-    return NextResponse.json({
-      ...result,
-      actions,
-      flags,
-    }, { headers: CORS_HEADERS });
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request" },
-      { status: 400, headers: CORS_HEADERS },
+    return withCorsHeaders(
+      NextResponse.json({
+        ...result,
+        actions,
+        flags,
+      }),
     );
+  } catch {
+    return withCorsHeaders(NextResponse.json({ error: "Invalid request" }, { status: 400 }));
   }
 }
