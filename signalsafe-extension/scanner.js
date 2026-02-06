@@ -43,16 +43,35 @@
     return Array.from(new Set(items));
   }
 
-  function getGmailSubjects() {
+  function getOpenedGmailEmail() {
     if (location.hostname !== "mail.google.com") {
-      return { openSubject: "", subjects: [] };
+      return { subject: "", body: "" };
     }
 
-    const openSubject = (document.querySelector("h2.hP")?.innerText || "").trim();
+    const subject = (document.querySelector("h2.hP")?.innerText || "").trim();
+
+    const bodyNode = document.querySelector("div.a3s.aiL") || document.querySelector("div.a3s");
+    let body = (bodyNode?.innerText || "").trim();
+
+    // Fallback: sometimes Gmail renders the opened email inside role=listitem.
+    if (body.length < 80) {
+      const listItems = document.querySelectorAll('[role="listitem"]');
+      const last = listItems[listItems.length - 1];
+      const maybeBody = (last?.innerText || "").trim();
+      if (maybeBody.length > body.length) body = maybeBody;
+    }
+
+    return { subject, body };
+  }
+
+  function getVisibleInboxSubjects() {
+    if (location.hostname !== "mail.google.com") {
+      return [];
+    }
 
     const subjectNodes = document.querySelectorAll(
       // Inbox list subjects
-      "span.bog, [role='main'] [role='row'] span[title]"
+      "tr.zA span.bog, span.bog"
     );
 
     const subjects = [];
@@ -65,10 +84,7 @@
       if (subjects.length >= 30) break;
     }
 
-    return {
-      openSubject,
-      subjects: uniq(subjects),
-    };
+    return uniq(subjects);
   }
 
   function subjectReasons(subject) {
@@ -94,22 +110,25 @@
     return reasons;
   }
 
-  const { openSubject, subjects } = getGmailSubjects();
-  const suspiciousSubjects = subjects
+  const opened = getOpenedGmailEmail();
+  const inboxSubjects = getVisibleInboxSubjects();
+  const suspiciousSubjects = inboxSubjects
     .map((subj) => ({ subj, reasons: subjectReasons(subj) }))
     .filter((x) => x.reasons.length > 0)
     .slice(0, 10);
 
-  // extract visible text
-  const pageText = document.body.innerText.slice(0, 15000);
-  const subjectBlock =
-    location.hostname === "mail.google.com"
-      ? `Gmail Subject Lines (visible):\n${
-          [openSubject, ...subjects].filter(Boolean).slice(0, 30).map(s => `- ${s}`).join("\n")
-        }\n\n`
-      : "";
+  // extract visible text (prefer opened email body on Gmail)
+  const scanTarget =
+    location.hostname === "mail.google.com" && opened.body
+      ? "Opened email"
+      : "This page";
 
-  const text = (subjectBlock + pageText).slice(0, 15000);
+  const scanTextRaw =
+    location.hostname === "mail.google.com" && opened.body
+      ? opened.body
+      : document.body.innerText;
+
+  const text = scanTextRaw.slice(0, 15000);
 
   const result = await new Promise(resolve => {
     chrome.runtime.sendMessage(
@@ -141,9 +160,14 @@
   const actions = result.actions || result.recommendedActions || [];
   const summary = (result.summary || "").trim();
 
+  const scannedWhatText =
+    location.hostname === "mail.google.com" && opened.subject
+      ? `\nScanned: ${scanTarget}\nSubject: ${opened.subject}`
+      : `\nScanned: ${scanTarget}`;
+
   const suspiciousSubjectsText =
     location.hostname === "mail.google.com" && suspiciousSubjects.length
-      ? `\n\nSuspicious subjects:\n${
+      ? `\n\nSuspicious inbox subject lines (heuristic):\n${
           suspiciousSubjects
             .map(x => `- "${x.subj}" (${x.reasons.join(", ")})`)
             .join("\n")
@@ -161,6 +185,7 @@
 
   alert(
     `SignalSafe Scan Complete:\n${result.verdict}\nRisk Score: ${result.riskScore}` +
+      scannedWhatText +
       flagsText +
       suspiciousSubjectsText +
       summaryText +
