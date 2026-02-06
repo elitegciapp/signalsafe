@@ -4,12 +4,29 @@ import { NextResponse } from "next/server";
 import { analyzeText } from "@/lib/analyzer";
 import { aiAnalyze } from "@/lib/aiAnalyzer";
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+export function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { text } = await req.json();
 
     if (!text || text.length < 10) {
-      return NextResponse.json({ error: "Text too short" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Text too short" },
+        { status: 400, headers: CORS_HEADERS },
+      );
     }
 
     // Try AI first
@@ -29,8 +46,11 @@ export async function POST(req: Request) {
       ...result,
       actions,
       flags,
-    });
+    }, { headers: CORS_HEADERS });
   } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request" },
+      { status: 400, headers: CORS_HEADERS },
+    );
   }
 }
