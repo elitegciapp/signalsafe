@@ -11,6 +11,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const text = info.selectionText;
 
+  const tabUrl = tab?.url || "";
+  if (isRestrictedUrl(tabUrl)) {
+    // Chrome blocks extensions from injecting into internal pages like chrome://extensions
+    console.warn("SignalSafe: cannot access restricted URL:", tabUrl);
+    return;
+  }
+
   try {
     const res = await fetch("http://localhost:3000/api/analyze", {
       method: "POST",
@@ -20,19 +27,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const data = await res.json();
 
-    chrome.scripting.executeScript({
+    if (!tab?.id) return;
+    await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: showResult,
       args: [data]
     });
 
   } catch {
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: showError
-    });
+    try {
+      if (!tab?.id) return;
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: showError
+      });
+    } catch (e) {
+      console.warn("SignalSafe: failed to inject error UI", e);
+    }
   }
 });
+
+function isRestrictedUrl(url) {
+  if (!url) return false;
+
+  return (
+    url.startsWith("chrome://") ||
+    url.startsWith("chrome-extension://") ||
+    url.startsWith("edge://") ||
+    url.startsWith("about:")
+  );
+}
 
 function showResult(result) {
   const existing = document.getElementById("signalsafe-panel");
